@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Opening file…</title>
+<style>
+  body{font-family:"Segoe UI",Arial,sans-serif;background:#f6f7f9;color:#1f2328;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center}
+  .card{background:#fff;border:1px solid #dde1e6;border-radius:12px;padding:28px 32px;max-width:640px;width:90%;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+  h1{font-size:20px;margin:0 0 6px}
+  .path{font-size:13px;color:#57606a;word-break:break-all;margin:0 0 20px}
+  button{font-size:15px;padding:10px 18px;border-radius:8px;border:1px solid #1a7f37;background:#1a7f37;color:#fff;cursor:pointer;margin-right:8px}
+  button.secondary{background:#fff;color:#1f2328;border-color:#d0d7de}
+  .note{font-size:13px;color:#57606a;margin-top:18px}
+  .err{color:#cf222e}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1 id="title">Opening…</h1>
+  <p class="path" id="path"></p>
+  <div id="actions"></div>
+  <p class="note" id="note"></p>
+</div>
+<script>
+(function () {
+  "use strict";
+  var DRIVE_LETTER = "G";
+  var APPS = {
+    xlsx: ["ms-excel", "Excel"], xlsm: ["ms-excel", "Excel"], xls: ["ms-excel", "Excel"], xlsb: ["ms-excel", "Excel"],
+    docx: ["ms-word", "Word"], docm: ["ms-word", "Word"], doc: ["ms-word", "Word"],
+    pptx: ["ms-powerpoint", "PowerPoint"], pptm: ["ms-powerpoint", "PowerPoint"], ppt: ["ms-powerpoint", "PowerPoint"]
+  };
+  var ROOTS = ["My Drive", "Shared drives"];
+
+  function $(id) { return document.getElementById(id); }
+  function fail(msg) {
+    $("title").textContent = "Can't open this link";
+    $("title").className = "err";
+    $("note").textContent = msg;
+    document.title = "Link error";
+  }
+
+  // Path arrives in the URL fragment (#x=...), which browsers never send to the server.
+  var hash = location.hash.replace(/^#/, "");
+  // Everything after "x=" is the path (so a stray unencoded "&" can't cut it short).
+  var raw = hash.indexOf("x=") === 0 ? hash.slice(2) : null;
+  if (!raw) { fail("No file path in this link."); return; }
+
+  var path;
+  try { path = decodeURIComponent(raw.replace(/\+/g, "%2B")); } catch (e) { fail("The file path in this link is not encoded correctly."); return; }
+
+  path = path.replace(/\\/g, "/").replace(/^\/+/, "").replace(/^G:\/+/i, "");
+  var parts = path.split("/");
+  if (parts.some(function (p) { return p === "" || p === "." || p === ".."; })) { fail("Invalid file path."); return; }
+  if (ROOTS.indexOf(parts[0]) === -1) { fail('Path must start with "My Drive/" or "Shared drives/".'); return; }
+
+  var name = parts[parts.length - 1];
+  var ext = (name.split(".").pop() || "").toLowerCase();
+  var app = APPS[ext];
+  if (!app || name.indexOf(".") === -1) { fail("Only Word, Excel and PowerPoint files can be opened from this link (got ." + ext + ")."); return; }
+
+  var fileUrl = "file:///" + DRIVE_LETTER + ":/" + parts.map(encodeURIComponent).join("/");
+  var officeUri = app[0] + ":ofe|u|" + fileUrl;
+  var winPath = DRIVE_LETTER + ":\\" + parts.join("\\");
+
+  document.title = "Opening " + name;
+  $("title").textContent = "Opening in " + app[1] + ": " + name;
+  $("path").textContent = winPath;
+
+  function launch() { window.location.href = officeUri; }
+
+  var openBtn = document.createElement("button");
+  openBtn.textContent = "Open in " + app[1];
+  openBtn.onclick = launch;
+  var copyBtn = document.createElement("button");
+  copyBtn.className = "secondary";
+  copyBtn.textContent = "Copy file path";
+  copyBtn.onclick = function () {
+    try { navigator.clipboard.writeText(winPath); copyBtn.textContent = "Copied"; } catch (e) {}
+  };
+  $("actions").appendChild(openBtn);
+  $("actions").appendChild(copyBtn);
+  $("note").textContent = "If " + app[1] + " didn't open, click the button. If it says the file can't be found, check that Google Drive for desktop is running, or open the file once from G: in File Explorer. You can close this tab.";
+
+  launch();
+  setTimeout(function () { try { window.close(); } catch (e) {} }, 4000);
+})();
+</script>
+</body>
+</html>
